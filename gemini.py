@@ -1,5 +1,6 @@
 import os
 import sys
+import pyttsx3
 import google.generativeai as genai
 from dotenv import load_dotenv
 
@@ -34,11 +35,21 @@ safety_settings = [
   },
 ]
 
+# use it if you want to chat with text only
 def model():
   text_model = genai.GenerativeModel(model_name="gemini-1.0-pro",
                                 generation_config=generation_config,
                                 safety_settings=safety_settings)
   return text_model
+
+
+def voice(text):
+    spoken_response = text.replace('*', '')
+    tts_engine = pyttsx3.init()
+    voices = tts_engine.getProperty('voices')
+    tts_engine.setProperty('voice', voices[1].id) #changing index changes voices but ony 0(male) and 1(female) are working here
+    tts_engine.say(spoken_response)
+    tts_engine.runAndWait()
 
 
 def main():
@@ -52,6 +63,7 @@ def main():
                 convo = model().start_chat(history=[])
                 convo.send_message(query)
                 print(convo.last.text)
-     
+                voice(convo.last.text)
+
 if __name__ == "__main__":
   main()
