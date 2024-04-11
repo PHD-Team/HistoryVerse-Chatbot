@@ -1,5 +1,6 @@
 import os
 import sys
+import speech_recognition as sr
 import pyttsx3
 import google.generativeai as genai
 from dotenv import load_dotenv
@@ -43,6 +44,27 @@ def model():
   return text_model
 
 
+def recognize_speech():
+    reconizer = sr.Recognizer()
+    
+    with sr.Microphone() as source:
+        print("Listening ...")
+        audio = reconizer.listen(source)
+    
+    try:
+        user_prompt = reconizer.recognize_google(audio)
+        print(f"You said: {user_prompt}")
+        return user_prompt
+    
+    except sr.UnknownValueError:
+        print("I couldn't understand what you said.")
+        exit()
+    
+    except sr.RequestError as e:
+        print("Could not connect to Google Speech.")
+        exit()
+
+
 def voice(text):
     spoken_response = text.replace('*', '')
     tts_engine = pyttsx3.init()
@@ -55,15 +77,31 @@ def voice(text):
 def main():
     
     while True:
+      conv_type = input("Please enter 't' for text conversation or enter 'v' for voice conversation: ").lower()
+      
+      if conv_type == 't':
+        
         query = input("\nEnter a query: ")
+        
         if query.lower() in ['quit', 'q', 'exit']:
-            sys.exit()
+          sys.exit()
             
         elif isinstance(query, str):
-                convo = model().start_chat(history=[])
-                convo.send_message(query)
-                print(convo.last.text)
-                voice(convo.last.text)
+          convo = model().start_chat(history=[])
+          convo.send_message(query)
+          print(convo.last.text)
+          voice(convo.last.text)
+      elif conv_type == 'v':
+        query = recognize_speech()
+        
+        if query.lower() in ['quit', 'q', 'exit']:
+          sys.exit()
+        
+        elif isinstance(query, str):
+          convo = model().start_chat(history=[])
+          convo.send_message(query)
+          print(convo.last.text)
+          voice(convo.last.text)  
 
 if __name__ == "__main__":
   main()
