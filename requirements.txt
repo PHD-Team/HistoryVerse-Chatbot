@@ -1,2 +1,13 @@
 google.generativeai
 python-dotenv
+
+# for visulization
+requests
+pillow
+
+# for voice recognition
+SpeechRecognition
+pyttsx3
+pyaudio
+
+
