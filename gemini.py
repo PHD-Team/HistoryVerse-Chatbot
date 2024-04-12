@@ -1,7 +1,13 @@
 import os
 import sys
+# for speech recognition
 import speech_recognition as sr
 import pyttsx3
+# for vision model and images visulization
+import io
+import requests
+from PIL import Image
+# for load gemini models api keys
 import google.generativeai as genai
 from dotenv import load_dotenv
 
@@ -37,13 +43,22 @@ safety_settings = [
 ]
 
 # use it if you want to chat with text only
-def model():
+def gemini_text_model(query):
   text_model = genai.GenerativeModel(model_name="gemini-1.0-pro",
                                 generation_config=generation_config,
                                 safety_settings=safety_settings)
-  return text_model
+  text_response = text_model.generate_content(query)
+  return text_response
 
+# use it if you want to chat with image too
+def gemini_vision_model(query, img):
+   vision_model = genai.GenerativeModel(model_name="gemini-pro-vision",
+                                generation_config=generation_config,
+                                safety_settings=safety_settings)
+   vision_response = vision_model.generate_content([query, img])
+   return vision_response.text
 
+# take the voice from the user and convert it to text
 def recognize_speech():
     reconizer = sr.Recognizer()
     
@@ -64,7 +79,7 @@ def recognize_speech():
         print("Could not connect to Google Speech.")
         exit()
 
-
+# convert the model answer to voice
 def voice(text):
     spoken_response = text.replace('*', '')
     tts_engine = pyttsx3.init()
@@ -77,7 +92,7 @@ def voice(text):
 def main():
     
     while True:
-      conv_type = input("Please enter 't' for text conversation or enter 'v' for voice conversation: ").lower()
+      conv_type = input("\nPlease enter 't' for text conversation or enter 'v' for voice conversation or enter 'i' for images conversation: ").lower()
       
       if conv_type == 't':
         
@@ -85,23 +100,87 @@ def main():
         
         if query.lower() in ['quit', 'q', 'exit']:
           sys.exit()
+
+        elif query.startswith('http'):
+          
+          image_path = query
+          response = requests.get(image_path)
+          if response.status_code == 200:
+            img = Image.open(io.BytesIO(response.content))
+         
+          while True:
+            conv_img_type = input("\nPlease enter 't' for text conversation about this image or enter 'v' for voice conversation about this image: ").lower()
+            
+            if conv_img_type == 't':
+
+              question = input("\nenter your question about this image: ")
+              if question.lower() in ['quit', 'q', 'exit']:
+                break
+              else:
+                convo = gemini_vision_model(question, img)
+                print('\n',convo)
+                voice(convo)
+
+            elif conv_img_type == 'v':
+              
+              print("\nenter your question about this image: ")
+              question = recognize_speech()
+              if question.lower() in ['quit', 'q', 'exit']:
+                 break
+              else:
+                convo = gemini_vision_model(question, img)
+                print('\n',convo)
+                voice(convo)    
             
         elif isinstance(query, str):
-          convo = model().start_chat(history=[])
-          convo.send_message(query)
-          print(convo.last.text)
-          voice(convo.last.text)
+          convo = gemini_text_model(query)
+          print('\n',convo.text)
+          voice(convo.text)
+      
       elif conv_type == 'v':
+        
+        print("\nEnter a query: ")
         query = recognize_speech()
         
         if query.lower() in ['quit', 'q', 'exit']:
           sys.exit()
         
         elif isinstance(query, str):
-          convo = model().start_chat(history=[])
-          convo.send_message(query)
-          print(convo.last.text)
-          voice(convo.last.text)  
+          convo = gemini_text_model(query)
+          print('\n',convo.text)
+          voice(convo.text)
+
+      elif conv_type == 'i':
+         
+         image_path = input("\nplease enter yout image path: ")
+         if not os.path.isfile(image_path):
+            raise SystemExit("invaild image path")
+         img = Image.open(image_path)
+         
+         while True:
+            conv_img_type = input("\nPlease enter 't' for text conversation about this image or enter 'v' for voice conversation about this image: ").lower()
+            
+            if conv_img_type == 't':
+
+              question = input("\nenter your question about this image: ")
+              if question.lower() in ['quit', 'q', 'exit']:
+                break
+              else:
+                convo = gemini_vision_model(question, img)
+                print('\n',convo)
+                voice(convo)
+
+            elif conv_img_type == 'v':
+              
+              print("\nenter your question about this image: ")
+              question = recognize_speech()
+              if question.lower() in ['quit', 'q', 'exit']:
+                 break
+              else:
+                convo = gemini_vision_model(question, img)
+                print('\n',convo)
+                voice(convo)    
+
 
 if __name__ == "__main__":
   main()
