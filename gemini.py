@@ -107,7 +107,7 @@ def identify_url_content(url):
         content_type = response.headers.get('content-type')
 
         if 'image' in content_type:
-            return "photo"
+            return "image"
         elif 'pdf' in content_type:
             return "pdf"
         else:
@@ -145,7 +145,10 @@ def image_conversation(image_source):
             else:
                 convo = gemini_vision_model(question, img)
                 print('\n', convo)
-                voice(convo)  
+                speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
+                if speak_response in ['yes', 'y']:
+                    voice(convo)
+                  
         elif conv_img_type == 'v':
             print("\nEnter your question about this image: ")
             question = recognize_speech()  
@@ -154,9 +157,11 @@ def image_conversation(image_source):
             else:
                 convo = gemini_vision_model(question, img)
                 print('\n', convo)
-                voice(convo)       
+                speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
+                if speak_response in ['yes', 'y']:
+                    voice(convo)      
 
-def chat_with_pdf(file_source):
+def pdf_conversation(file_source):
     # Load PDF content
     if os.path.isfile(file_source):
         pdf_loader = PyPDFLoader(file_source)
@@ -227,6 +232,9 @@ def chat_with_pdf(file_source):
         print(question)
         print("\n> Answer:")
         print(result['output_text'])
+        speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
+        if speak_response in ['yes', 'y']:
+           voice(result['output_text'])
 
 def main():
     
@@ -242,16 +250,19 @@ def main():
 
         elif query.startswith('http'):
            content_type = identify_url_content(query)
-           if content_type == 'photo':
+           if content_type == 'image':
               image_conversation(query)
            
            elif content_type == 'pdf':
-              chat_with_pdf(query)
+              pdf_conversation(query)
 
         elif isinstance(query, str):
           convo = gemini_text_model(query)
           print(convo)
-          voice(convo)
+          speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
+          if speak_response in ['yes', 'y']:
+             voice(convo)
+         
       
       elif conv_type == 'v':
         
@@ -263,9 +274,11 @@ def main():
         
         elif isinstance(query, str):
           convo = gemini_text_model(query)
-          print('\n',convo.text)
-          voice(convo.text)
-
+          print('\n',convo)
+          speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
+          if speak_response in ['yes', 'y']:
+             voice(convo)
+          
       elif conv_type == 'i':
          
          image_path = input("\nplease enter yout image path: ")
@@ -284,8 +297,10 @@ def main():
               else:
                 convo = gemini_vision_model(question, img)
                 print('\n',convo)
-                voice(convo)
-
+                speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
+                if speak_response in ['yes', 'y']:
+                    voice(convo)
+                    
             elif conv_img_type == 'v':
               
               print("\nenter your question about this image: ")
@@ -295,14 +310,16 @@ def main():
               else:
                 convo = gemini_vision_model(question, img)
                 print('\n',convo)
-                voice(convo)
-
+                speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
+                if speak_response in ['yes', 'y']:
+                    voice(convo)
+                
       elif conv_type == 'p':
             
             pdf_path = input("\nEnter the path to your PDF file: ")
             if not os.path.isfile(pdf_path):
                 raise SystemExit("Invalid PDF path")
-            chat_with_pdf(pdf_path)
+            pdf_conversation(pdf_path)
 
       else:
         print("Invalid input. Please enter 't', 'v', 'i', or 'p'.")               
