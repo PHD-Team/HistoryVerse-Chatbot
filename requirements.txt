@@ -1,13 +1,21 @@
+# Natural Language Processing
 google.generativeai
+langchain-google-genai
 python-dotenv
+langchain
+chromadb
+faiss-cpu
 
 # for visulization
 requests
 pillow
+ipython
 
 # for voice recognition
 SpeechRecognition
 pyttsx3
 pyaudio
 
-
+# to chat with our data
+unstructured
+unstructured[pdf]
