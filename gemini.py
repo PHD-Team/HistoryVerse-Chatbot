@@ -17,6 +17,8 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain_core.prompts import PromptTemplate
+# for chating with our database
+from gemini_data_chat import retrieval_qa_pipline
 # for identifythe url content type
 from urllib.parse import urlparse
 # for load gemini models api keys
@@ -208,13 +210,10 @@ def pdf_conversation(file_source):
     Answer the question as detailed as possible from the provided context.
     Make sure to provide all the details. If the answer is not in the provided context,
     simply say so and inform the user. Do not provide the wrong answer.
-
     Context:
     {context}
-
     Question:
     {question}
-
     Answer:
     """
     prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
@@ -268,11 +267,20 @@ def main():
               pdf_conversation(query)
 
         elif isinstance(query, str):
-          convo = gemini_text_model(query)
-          print(convo)
-          speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
-          if speak_response in ['yes', 'y']:
-             voice(convo)
+            qa = retrieval_qa_pipline()
+            res = qa.invoke({"query": query})  # Check for answer in context
+            answer, docs = res["result"], res["source_documents"]  
+            if answer == 'answer is not available in the context':
+                convo = gemini_text_model(query)
+                print(convo)
+                speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
+                if speak_response in ['yes', 'y']:
+                    voice(convo)
+            else:
+                print(answer)    
+                speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
+                if speak_response in ['yes', 'y']:
+                    voice(answer)
          
       
       elif conv_type == 'v':
@@ -284,12 +292,21 @@ def main():
           sys.exit()
         
         elif isinstance(query, str):
-          convo = gemini_text_model(query)
-          print('\n',convo)
-          speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
-          if speak_response in ['yes', 'y']:
-             voice(convo)
-          
+            qa = retrieval_qa_pipline()
+            res = qa.invoke({"query": query})  # Check for answer in context
+            answer, docs = res["result"], res["source_documents"]  
+            if answer == 'answer is not available in the context':
+                convo = gemini_text_model(query)
+                print('\n',convo)
+                speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
+                if speak_response in ['yes', 'y']:
+                    voice(convo)
+            else:
+                print(answer)    
+                speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
+                if speak_response in ['yes', 'y']:
+                    voice(answer)
+    
       elif conv_type == 'i':
          
          image_path = input("\nplease enter yout image path: ")
