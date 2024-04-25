@@ -158,7 +158,7 @@ def image_conversation(image_source):
                 break
             else:
                 convo = gemini_vision_model(question, img)
-                print('\n', convo)
+                print('\n',convo)
                 speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
                 if speak_response in ['yes', 'y']:
                     voice(convo)
@@ -170,7 +170,7 @@ def image_conversation(image_source):
                 break
             else:
                 convo = gemini_vision_model(question, img)
-                print('\n', convo)
+                print('\n',convo)
                 speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
                 if speak_response in ['yes', 'y']:
                     voice(convo)      
@@ -270,12 +270,14 @@ def main():
             qa = retrieval_qa_pipline()
             res = qa.invoke({"query": query})  # Check for answer in context
             answer, docs = res["result"], res["source_documents"]  
+            
             if answer == 'answer is not available in the context':
                 convo = gemini_text_model(query)
                 print(convo)
                 speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
                 if speak_response in ['yes', 'y']:
                     voice(convo)
+            
             else:
                 print(answer)    
                 speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
@@ -312,35 +314,7 @@ def main():
          image_path = input("\nplease enter yout image path: ")
          if not os.path.isfile(image_path):
             raise SystemExit("invaild image path")
-         img = Image.open(image_path)
-         
-         while True:
-            conv_img_type = input("\nPlease enter 't' for text conversation about this image or enter 'v' for voice conversation about this image: ").lower()
-            
-            if conv_img_type == 't':
-
-              question = input("\nenter your question about this image: ")
-              if question.lower() in ['quit', 'q', 'exit']:
-                break
-              else:
-                convo = gemini_vision_model(question, img)
-                print('\n',convo)
-                speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
-                if speak_response in ['yes', 'y']:
-                    voice(convo)
-                    
-            elif conv_img_type == 'v':
-              
-              print("\nenter your question about this image: ")
-              question = recognize_speech()
-              if question.lower() in ['quit', 'q', 'exit']:
-                 break
-              else:
-                convo = gemini_vision_model(question, img)
-                print('\n',convo)
-                speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
-                if speak_response in ['yes', 'y']:
-                    voice(convo)
+         image_conversation(image_path)
                 
       elif conv_type == 'p':
             
