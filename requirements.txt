@@ -16,8 +16,4 @@ SpeechRecognition
 pyttsx3
 pyaudio
 
-# for data chat
-docx2txt
-unstructured
-unstructured[pdf]
 
