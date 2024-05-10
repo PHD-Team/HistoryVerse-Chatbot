@@ -11,7 +11,8 @@ from langchain.prompts import PromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
-from langchain_community.vectorstores import Chroma
+# from langchain_community.vectorstores import Chroma
+from langchain_community.vectorstores.chroma import Chroma
 
 from chromadb.config import Settings
 
@@ -41,7 +42,7 @@ def retrieval_qa_pipline():
 
     # get the prompt template and memory if set by the user.
     prompt_template = """
-    your name is Huhu. You are a helpful assistant, you will use the provided context to answer user questions.
+    your name is Mora. You are a helpful assistant, you will use the provided context to answer user questions.
     Read the given context before answering questions and think step by step. If you can not answer a user question based on 
     the provided context just say, "answer is not available in the context", don't provide the wrong answer. Provide a detailed answer to the question.\n\n.
     Context:\n {context}?\n

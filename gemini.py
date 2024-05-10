@@ -10,7 +10,8 @@ from PIL import Image
 # for chat with docs
 import tempfile
 from langchain_community.document_loaders import PyPDFLoader
-from langchain_community.vectorstores import Chroma
+# from langchain_community.vectorstores import Chroma
+from langchain_community.vectorstores.chroma import Chroma
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.chains import RetrievalQA
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
@@ -59,7 +60,7 @@ safety_settings = [
 # use it if you want to chat with text only
 def gemini_text_model(query):
     historical_text_prompt = """
-    You are a large language model can answer only about the question history and histracil places and torism esbacaily in egypt and alexandrai.
+    Your name is Mora. You are a large language model can answer only about the question history and histracil places and torism esbacaily in egypt and alexandrai.
     You have extensive knowledge of history and can answer questions about historical events, figures, and periods. if the question not about it answer sorry i can't answer this question.
     Please answer the following question with historical accuracy and provide relevant details:
     """
@@ -73,7 +74,7 @@ def gemini_text_model(query):
 # use it if you want to chat with image too
 def gemini_vision_model(query, img):
     historical_image_prompt = """
-    You are a large language model specialized in analyzing historical images, particularly those related to Egypt and Alexandria. 
+    Your name is Mora. You are a large language model specialized in analyzing historical images, particularly those related to Egypt and Alexandria. 
     Please examine the image and provide insights into its historical context, significance, and any relevant details about the depicted objects, people, or places. 
     If the image does not appear to be historical or relevant to Egypt/Alexandria, please state that you cannot analyze it and say "sorry i can't answer about it". 
     """
@@ -110,7 +111,7 @@ def voice(text):
     spoken_response = text.replace('*', '')
     tts_engine = pyttsx3.init()
     voices = tts_engine.getProperty('voices')
-    tts_engine.setProperty('voice', voices[1].id) #changing index changes voices but ony 0(male) and 1(female) are working here
+    tts_engine.setProperty('voice', voices[0].id) #changing index changes voices but ony 0(male) and 1(female) are working here
     tts_engine.say(spoken_response)
     tts_engine.runAndWait()
 
@@ -207,7 +208,7 @@ def pdf_conversation(file_source):
 
     # Define prompt template
     prompt_template = """
-    Answer the question as detailed as possible from the provided context.
+    Your name is Mora. Answer the question as detailed as possible from the provided context.
     Make sure to provide all the details. If the answer is not in the provided context,
     simply say so and inform the user. Do not provide the wrong answer.
     Context:
@@ -312,15 +313,11 @@ def main():
       elif conv_type == 'i':
          
          image_path = input("\nplease enter yout image path: ")
-         if not os.path.isfile(image_path):
-            raise SystemExit("invaild image path")
          image_conversation(image_path)
                 
       elif conv_type == 'p':
             
             pdf_path = input("\nEnter the path to your PDF file: ")
-            if not os.path.isfile(pdf_path):
-                raise SystemExit("Invalid PDF path")
             pdf_conversation(pdf_path)
 
       else:
