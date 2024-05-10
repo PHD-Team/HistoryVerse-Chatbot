@@ -1,7 +1,6 @@
 import logging
 import os
 import argparse
-import sys
 
 from flask import Flask, request, jsonify
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
@@ -37,24 +36,22 @@ def text_conversation():
             response = image_conversation()
         elif content_type == 'pdf':
             response = pdf_conversation()
-    elif isinstance(query, str):
-        qa = retrieval_qa_pipline()
-        res = qa.invoke({"query": query})
-        answer, docs = res["result"], res["source_documents"]
-
-        if answer == 'answer is not available in the context':
-            convo = gemini_text_model(query)
-            response_text = convo
-        else:
-            response_text = answer  
-
-        response = jsonify({"response": response_text})
-
     
-    if speak_response: 
-        jsonify(response_text)
-        voice(response_text)
-    return response
+    elif isinstance(query, str):
+            qa = retrieval_qa_pipline()
+            res = qa.invoke({"query": query})  # Check for answer in context
+            answer, docs = res["result"], res["source_documents"]  
+            if answer == 'answer is not available in the context':
+                convo = gemini_text_model(query)
+                response = jsonify({"response": convo})
+                if speak_response:
+                    voice(convo)
+            else:
+                response =  jsonify({"response": answer})   
+                if speak_response:
+                    voice(answer)
+
+    return response                      
 
 @app.route("/voice_convo", methods=["GET", "POST"])
 def voice_conversation():
@@ -68,16 +65,16 @@ def voice_conversation():
         answer, docs = res["result"], res["source_documents"]
         if answer == 'answer is not available in the context':
             convo = gemini_text_model(query)
-            response_text = convo 
+            response = jsonify({"response": convo})
+            if speak_response:
+                voice(convo)
         else:
-            response_text = answer
-
-        response = jsonify({"response": response_text})
+            response =  jsonify({"response": answer})   
+            if speak_response:
+                voice(answer)
     else:
         response = jsonify({"error": "Speech not recognized."})
-
-    if speak_response:
-        voice(response_text)
+        
     return response
     
 @app.route("/image_convo", methods=["GET", "POST"])

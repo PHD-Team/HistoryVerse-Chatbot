@@ -60,7 +60,7 @@ safety_settings = [
 # use it if you want to chat with text only
 def gemini_text_model(query):
     historical_text_prompt = """
-    Your name is Mora. You are a large language model can answer only about the question history and histracil places and torism esbacaily in egypt and alexandrai.
+    Your name is Mora. You are a large language model can answer only about the question history and histracil places and torism in all the world, esbacaily in egypt and alexandrai.
     You have extensive knowledge of history and can answer questions about historical events, figures, and periods. if the question not about it answer sorry i can't answer this question.
     Please answer the following question with historical accuracy and provide relevant details:
     """
@@ -74,7 +74,7 @@ def gemini_text_model(query):
 # use it if you want to chat with image too
 def gemini_vision_model(query, img):
     historical_image_prompt = """
-    Your name is Mora. You are a large language model specialized in analyzing historical images, particularly those related to Egypt and Alexandria. 
+    Your name is Mora. You are a large language model specialized in analyzing historical images in all the world, particularly those related to Egypt and Alexandria. 
     Please examine the image and provide insights into its historical context, significance, and any relevant details about the depicted objects, people, or places. 
     If the image does not appear to be historical or relevant to Egypt/Alexandria, please state that you cannot analyze it and say "sorry i can't answer about it". 
     """
