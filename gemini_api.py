@@ -3,6 +3,13 @@ import os
 import argparse
 
 from flask import Flask, request, jsonify
+# for vision model and images visulization
+import io
+import requests
+from PIL import Image
+# for chat with docs
+import tempfile
+from langchain_community.document_loaders import PyPDFLoader
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
@@ -14,21 +21,13 @@ from langchain.chains.question_answering import load_qa_chain
 from gemini import GOOGLE_API_KEY, gemini_text_model, gemini_vision_model, recognize_speech, voice, identify_url_content
 from gemini_data_chat import retrieval_qa_pipline
 
-from PIL import Image
-import io
-import requests
-from PIL import Image
-
-import tempfile
-from langchain_community.document_loaders import PyPDFLoader
-
 app = Flask(__name__)
 
 @app.route("/text_convo", methods=["GET", "POST"])
 def text_conversation():
     data = request.get_json()
     query = data.get("query")
-    speak_response = data.get("speak", False)  # Get 'speak' flag from request
+    speak_response = data.get("speak", False)
 
     if query.startswith('http'):
         content_type = identify_url_content(query)
@@ -39,7 +38,7 @@ def text_conversation():
     
     elif isinstance(query, str):
             qa = retrieval_qa_pipline()
-            res = qa.invoke({"query": query})  # Check for answer in context
+            res = qa.invoke({"query": query})
             answer, docs = res["result"], res["source_documents"]  
             if answer == 'answer is not available in the context':
                 convo = gemini_text_model(query)
@@ -50,7 +49,6 @@ def text_conversation():
                 response =  jsonify({"response": answer})   
                 if speak_response:
                     voice(answer)
-
     return response                      
 
 @app.route("/voice_convo", methods=["GET", "POST"])
@@ -73,14 +71,15 @@ def voice_conversation():
             if speak_response:
                 voice(answer)
     else:
-        response = jsonify({"error": "Speech not recognized."})
-        
+        response = jsonify({"error": "Speech not recognized."}) 
     return response
     
 @app.route("/image_convo", methods=["GET", "POST"])
 def image_conversation():
     data = request.get_json()
     image_source = data.get("query")
+    mode = data.get("mode", "text")  # Default to text mode
+    question = data.get("question")
     speak_response = data.get("speak", False)
 
     if image_source.startswith('http'):
@@ -88,25 +87,38 @@ def image_conversation():
         if img_response.status_code == 200:
             img = Image.open(io.BytesIO(img_response.content))
         else:
-            return jsonify({"Error downloading image": img_response.status_code})
+            return jsonify({"error": "Error downloading image", "status_code": img_response.status_code})
     else:
         if not os.path.isfile(image_source):
             return jsonify({"error": "Invalid image path"})
         img = Image.open(image_source)
-        
-    question = question = input("\nEnter your question about this image: ")
-    convo = gemini_vision_model(question, img)
-    response_text = convo
+
+    if mode == "text":
+        if question:
+            response_text = gemini_vision_model(question, img)
+        else:
+            return jsonify({"error": "Please provide a question in text mode."}) 
+
+    elif mode == "voice":
+        question = recognize_speech()
+        if question:
+            response_text = gemini_vision_model(question, img)
+        else:
+            return jsonify({"error": "Speech not recognized."}) 
+    else:
+        return jsonify({"error": "Invalid mode. Choose 'text' or 'voice'."})
+
     response = jsonify({"response": response_text})
-    
     if speak_response:
-        voice(response)
+        voice(response_text)
     return response
 
 @app.route("/pdf_convo", methods=["GET", "POST"])
 def pdf_conversation():
     data = request.get_json()
     file_source = data.get("query")
+    mode = data.get("mode", "text")
+    question = data.get("question")
     speak_response = data.get("speak", False)
 
     if os.path.isfile(file_source):
@@ -148,18 +160,23 @@ def pdf_conversation():
 
     stuff_chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
     
-    question = input("\nEnter your question about this PDF: ")
-    result = stuff_chain.invoke({"input_documents": pages, "question": question}, return_only_outputs=True)
-    response_text = result['output_text']
-    response = jsonify({"response": response_text})
+    if mode == "text":
+        if not question:
+            return jsonify({"error": "Please provide a question in text mode."})
+    elif mode == "voice":
+        question = recognize_speech()
+        if not question:
+            return jsonify({"error": "Speech not recognized."})
+    else:
+        return jsonify({"error": "Invalid mode. Choose 'text' or 'voice'."})
     
+    result = stuff_chain.invoke({"input_documents": pages, "question": question}, return_only_outputs=True)
+    response_text = result['output_text'] 
+    response = jsonify({"response": response_text})
     if speak_response:
-        voice(response)
+        voice(response_text)
     return response
-
-if __name__ == "__main__":
-    app.run(debug=True)
-
+    
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=5110, help="Port to run the API on. Defaults to 5110.")
