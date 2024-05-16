@@ -4,7 +4,7 @@ langchain-google-genai
 python-dotenv
 langchain
 chromadb
-faiss-cpu
+openai
 
 # for visulization
 requests
@@ -13,6 +13,7 @@ ipython
 
 # for voice recognition
 SpeechRecognition
+faster_whisper
 pyttsx3
 pyaudio
 
@@ -20,3 +21,6 @@ pyaudio
 docx2txt
 unstructured
 unstructured[pdf]
+
+#for api
+flask

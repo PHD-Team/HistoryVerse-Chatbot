@@ -18,8 +18,11 @@ from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
 from langchain.chains.question_answering import load_qa_chain
 
-from gemini import GOOGLE_API_KEY, gemini_text_model, gemini_vision_model, recognize_speech, voice, identify_url_content
+from gemini import GOOGLE_API_KEY, gemini_chat_model, identify_url_content
+from SpeechRecognition import recognize_speech, process_user_voice, voice, speek
 from gemini_data_chat import retrieval_qa_pipline
+
+import speech_recognition as sr
 
 app = Flask(__name__)
 
@@ -28,28 +31,30 @@ def text_conversation():
     data = request.get_json()
     query = data.get("query")
     speak_response = data.get("speak", False)
-
+ 
     if query.startswith('http'):
         content_type = identify_url_content(query)
         if content_type == 'image':
-            response = image_conversation()
+                response = image_conversation()
         elif content_type == 'pdf':
-            response = pdf_conversation()
+                response = pdf_conversation()
     
     elif isinstance(query, str):
             qa = retrieval_qa_pipline()
             res = qa.invoke({"query": query})
             answer, docs = res["result"], res["source_documents"]  
-            if answer == 'answer is not available in the context':
-                convo = gemini_text_model(query)
-                response = jsonify({"response": convo})
+            if answer == "answer is not available in the context":
+                convo = gemini_chat_model(query)
+                response_text = convo
+                response = jsonify({"Question": query}, {"Answer": convo})
                 if speak_response:
-                    voice(convo)
+                    voice(response_text)
             else:
-                response =  jsonify({"response": answer})   
+                response_text = answer 
+                response = jsonify({"Question": query}, {"Answer": answer})
                 if speak_response:
-                    voice(answer)
-    return response                      
+                    voice(response_text)           
+    return response
 
 @app.route("/voice_convo", methods=["GET", "POST"])
 def voice_conversation():
@@ -57,23 +62,26 @@ def voice_conversation():
     speak_response = data.get("speak", False)
 
     query = recognize_speech()
-    if query:
+    # query = process_user_voice()
+    if not query:
+        response = jsonify("No input detected. Please try again.")
+    else:
         qa = retrieval_qa_pipline()
         res = qa.invoke({"query": query})
         answer, docs = res["result"], res["source_documents"]
-        if answer == 'answer is not available in the context':
-            convo = gemini_text_model(query)
-            response = jsonify({"response": convo})
+        if answer == "answer is not available in the context":
+            convo = gemini_chat_model(query)
+            response_text = convo
+            response = jsonify({"Question": query}, {"Answer": convo})
             if speak_response:
-                voice(convo)
+                voice(response_text)
         else:
-            response =  jsonify({"response": answer})   
+            response_text = answer 
+            response = jsonify({"Question": query}, {"Answer": answer})
             if speak_response:
-                voice(answer)
-    else:
-        response = jsonify({"error": "Speech not recognized."}) 
+                voice(response_text)           
     return response
-    
+
 @app.route("/image_convo", methods=["GET", "POST"])
 def image_conversation():
     data = request.get_json()
@@ -87,7 +95,7 @@ def image_conversation():
         if img_response.status_code == 200:
             img = Image.open(io.BytesIO(img_response.content))
         else:
-            return jsonify({"error": "Error downloading image", "status_code": img_response.status_code})
+            return jsonify({"error": "Error downloading image", "status_code": img_response.status_code}),500
     else:
         if not os.path.isfile(image_source):
             return jsonify({"error": "Invalid image path"})
@@ -95,20 +103,21 @@ def image_conversation():
 
     if mode == "text":
         if question:
-            response_text = gemini_vision_model(question, img)
+            response_text = gemini_chat_model(question, img)
         else:
-            return jsonify({"error": "Please provide a question in text mode."}) 
+            return jsonify({"error": "Please provide a question in text mode."})
 
     elif mode == "voice":
         question = recognize_speech()
+        # question = process_user_voice()
         if question:
-            response_text = gemini_vision_model(question, img)
+            response_text = gemini_chat_model(question, img)
         else:
-            return jsonify({"error": "Speech not recognized."}) 
+            return jsonify({"error": "Speech not recognized."})
     else:
         return jsonify({"error": "Invalid mode. Choose 'text' or 'voice'."})
 
-    response = jsonify({"response": response_text})
+    response = jsonify({"Question:": question}, {"Answer": response_text})
     if speak_response:
         voice(response_text)
     return response
@@ -148,8 +157,9 @@ def pdf_conversation():
 
     prompt_template = """
     Your name is Mora. Answer the question as detailed as possible from the provided context.
-    Make sure to provide all the details. If the answer is not in the provided context,
-    simply say so and inform the user. Do not provide the wrong answer.
+    you can summrize the all context too. Make sure to provide all the details.
+    If the answer is not in the provided context, simply say so and inform the user.
+    Do not provide the wrong answer. Please answer in the same language as the question.
     Context:
     {context}
     Question:
@@ -165,14 +175,15 @@ def pdf_conversation():
             return jsonify({"error": "Please provide a question in text mode."})
     elif mode == "voice":
         question = recognize_speech()
+        # question = process_user_voice()
         if not question:
             return jsonify({"error": "Speech not recognized."})
     else:
         return jsonify({"error": "Invalid mode. Choose 'text' or 'voice'."})
     
     result = stuff_chain.invoke({"input_documents": pages, "question": question}, return_only_outputs=True)
-    response_text = result['output_text'] 
-    response = jsonify({"response": response_text})
+    response_text = result['output_text']
+    response = jsonify({"Question:": question}, {"Answer": response_text})
     if speak_response:
         voice(response_text)
     return response

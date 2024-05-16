@@ -1,8 +1,5 @@
 import os
 import sys
-# for speech recognition
-import speech_recognition as sr
-import pyttsx3
 # for vision model and images visulization
 import io
 import requests
@@ -18,10 +15,12 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain_core.prompts import PromptTemplate
-# for chating with our database
-from gemini_data_chat import retrieval_qa_pipline
 # for identifythe url content type
 from urllib.parse import urlparse
+# for speech recognition
+from SpeechRecognition import recognize_speech, process_user_voice, voice, speek
+# for chating with our database
+from gemini_data_chat import retrieval_qa_pipline
 # for load gemini models api keys
 import google.generativeai as genai
 from dotenv import load_dotenv
@@ -32,88 +31,58 @@ GOOGLE_API_KEY = genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 # Set up the model
 generation_config = {
-  "temperature": 0.9,
-  "top_p": 1,
-  "top_k": 1,
-  "max_output_tokens": 2048,
+  "temperature": 1,
+  "top_p": 0.95,
+  "top_k": 64,
+  "max_output_tokens": 8192,
+  "response_mime_type": "text/plain",
 }
-
 safety_settings = [
   {
     "category": "HARM_CATEGORY_HARASSMENT",
-    "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+    "threshold": "BLOCK_MEDIUM_AND_ABOVE",
   },
   {
     "category": "HARM_CATEGORY_HATE_SPEECH",
-    "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+    "threshold": "BLOCK_MEDIUM_AND_ABOVE",
   },
   {
     "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-    "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+    "threshold": "BLOCK_MEDIUM_AND_ABOVE",
   },
   {
     "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-    "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+    "threshold": "BLOCK_MEDIUM_AND_ABOVE",
   },
 ]
-
-# use it if you want to chat with text only
-def gemini_text_model(query):
-    historical_text_prompt = """
-    Your name is Mora. You are a large language model can answer only about the question history and histracil places and torism in all the world, esbacaily in egypt and alexandrai.
-    You have extensive knowledge of history and can answer questions about historical events, figures, and periods. if the question not about it answer sorry i can't answer this question.
-    Please answer the following question with historical accuracy and provide relevant details:
+memory = [] # global conversation_memory
+def gemini_chat_model(query, img=None):
+    historical_prompt = """
+    Your name is Mora. You are a large language model specialized in analyzing history, historical questions, historical images, and historical places in all the world, esbacaily those related to Egypt and Alexandria. 
+    You have extensive knowledge of history and can answer questions about historical events, figures, and periods. you can not answer about other fildes.
+    
+    If the query is related to an image,Please examine the image and provide insights into its historical context , significance, and any relevant details about the depicted objects, people, or places.
+    If the image does not appear to be historical or relevant to Egypt/Alexandria, please state that you cannot analyze it.
+    
+    If the query is about history but not related to an image, answer only about history and histracil places and torism in all the world, esbacaily in egypt and alexandrai.
+    You have extensive knowledge of history and can answer questions about historical events, figures, and periods. if the question not about it please state that you cannot answer.
+    Please answer the following question with historical accuracy and provide relevant details, keeping in mind the previous conversation:
+    
+    If the query is not about history or the image is not related to Egypt/Alexandria, please state that you cannot analyze it.
     """
-    full_query = historical_text_prompt + query
-    text_model = genai.GenerativeModel(model_name="gemini-1.0-pro",
-                                      generation_config=generation_config,
-                                      safety_settings=safety_settings)
-    text_response = text_model.generate_content(full_query)
-    return text_response.text
+    memory.append(f"User: {query}")
+    full_query = historical_prompt + "\n" + "\n".join(memory)
+    gemini_model = genai.GenerativeModel(model_name="gemini-1.5-flash-latest",
+                                             generation_config=generation_config,
+                                             safety_settings=safety_settings)
+    # Determine which model to use based on the presence of an image
+    if img:
+        response = gemini_model.generate_content([full_query, img])
+    else:
+        response = gemini_model.generate_content(full_query)
 
-# use it if you want to chat with image too
-def gemini_vision_model(query, img):
-    historical_image_prompt = """
-    Your name is Mora. You are a large language model specialized in analyzing historical images in all the world, particularly those related to Egypt and Alexandria. 
-    Please examine the image and provide insights into its historical context, significance, and any relevant details about the depicted objects, people, or places. 
-    If the image does not appear to be historical or relevant to Egypt/Alexandria, please state that you cannot analyze it and say "sorry i can't answer about it". 
-    """
-    full_query = historical_image_prompt + query
-    vision_model = genai.GenerativeModel(model_name="gemini-pro-vision",
-                                         generation_config=generation_config,
-                                         safety_settings=safety_settings)
-    vision_response = vision_model.generate_content([full_query, img])
-    return vision_response.text
-
-# take the voice from the user and convert it to text
-def recognize_speech():
-    reconizer = sr.Recognizer()
-    
-    with sr.Microphone() as source:
-        print("Listening ...")
-        audio = reconizer.listen(source)
-    
-    try:
-        user_prompt = reconizer.recognize_google(audio)
-        print(f"You said: {user_prompt}")
-        return user_prompt
-    
-    except sr.UnknownValueError:
-        print("I couldn't understand what you said.")
-        exit()
-    
-    except sr.RequestError as e:
-        print("Could not connect to Google Speech.")
-        exit()
-
-# convert the model answer to voice
-def voice(text):
-    spoken_response = text.replace('*', '')
-    tts_engine = pyttsx3.init()
-    voices = tts_engine.getProperty('voices')
-    tts_engine.setProperty('voice', voices[0].id) #changing index changes voices but ony 0(male) and 1(female) are working here
-    tts_engine.say(spoken_response)
-    tts_engine.runAndWait()
+    memory.append(f"answer: {response.text}")
+    return response.text
 
 def identify_url_content(url):
     
@@ -158,20 +127,23 @@ def image_conversation(image_source):
             if question.lower() in ['quit', 'q', 'exit']:
                 break
             else:
-                convo = gemini_vision_model(question, img)
-                print('\n',convo)
+                convo = gemini_chat_model(question, img)
+                print(f"\n> Question:\n {question}")
+                print(f"\n> Answer:\n {convo}")
                 speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
                 if speak_response in ['yes', 'y']:
                     voice(convo)
                   
         elif conv_img_type == 'v':
             print("\nEnter your question about this image: ")
-            question = recognize_speech()  
+            question = recognize_speech()
+            # question = process_user_voice()  
             if question.lower() in ['quit', 'q', 'exit']:
                 break
             else:
-                convo = gemini_vision_model(question, img)
-                print('\n',convo)
+                convo = gemini_chat_model(question, img)
+                print(f"\n> Question:\n {question}")
+                print(f"\n> Answer:\n {convo}")
                 speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
                 if speak_response in ['yes', 'y']:
                     voice(convo)      
@@ -201,7 +173,7 @@ def pdf_conversation(file_source):
     vector_index = Chroma.from_texts(texts, embeddings).as_retriever(search_kwargs={"k": 5})
 
     # Set up model and chain for question answering
-    model = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key=GOOGLE_API_KEY, temperature=0.2)
+    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", google_api_key=GOOGLE_API_KEY, temperature=1)
     qa_chain = RetrievalQA.from_chain_type(
         model, retriever=vector_index, return_source_documents=False
     )
@@ -209,8 +181,9 @@ def pdf_conversation(file_source):
     # Define prompt template
     prompt_template = """
     Your name is Mora. Answer the question as detailed as possible from the provided context.
-    Make sure to provide all the details. If the answer is not in the provided context,
-    simply say so and inform the user. Do not provide the wrong answer.
+    you can summrize the all context too. Make sure to provide all the details.
+    If the answer is not in the provided context, simply say so and inform the user.
+    Do not provide the wrong answer.
     Context:
     {context}
     Question:
@@ -231,6 +204,7 @@ def pdf_conversation(file_source):
         elif conv_pdf_type == 'v':
             print("\nEnter your question about this PDF: ")
             question = recognize_speech()
+            # question = process_user_voice()
         else:
             print("Invalid input. Please enter 't' or 'v'.")
             continue
@@ -239,16 +213,13 @@ def pdf_conversation(file_source):
         if question.lower() in ['quit', 'q', 'exit']:
             break
         result = stuff_chain.invoke({"input_documents": pages, "question": question}, return_only_outputs=True)
-        print("\n> Question:")
-        print(question)
-        print("\n> Answer:")
-        print(result['output_text'])
+        print(f"\n> Question:\n {question}")
+        print(f"\n> Answer:\n {result['output_text']}")
         speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
         if speak_response in ['yes', 'y']:
            voice(result['output_text'])
 
 def main():
-    
     while True:
       conv_type = input("\nPlease enter 't' for text conversation or enter 'v' for voice conversation or enter 'i' for images conversation or enter 'p' for pdf conversation: ").lower()
       
@@ -273,14 +244,16 @@ def main():
             answer, docs = res["result"], res["source_documents"]  
             
             if answer == 'answer is not available in the context':
-                convo = gemini_text_model(query)
-                print(convo)
+                convo = gemini_chat_model(query)
+                print(f"\n> Question:\n {query}")
+                print(f"\n> Answer:\n {convo}")
                 speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
                 if speak_response in ['yes', 'y']:
                     voice(convo)
             
             else:
-                print(answer)    
+                print(f"\n> Question:\n {query}")
+                print(f"\n> Answer:\n {answer}")
                 speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
                 if speak_response in ['yes', 'y']:
                     voice(answer)
@@ -288,8 +261,8 @@ def main():
       
       elif conv_type == 'v':
         
-        print("\nEnter a query: ")
         query = recognize_speech()
+        # query = process_user_voice()
         
         if query.lower() in ['quit', 'q', 'exit']:
           sys.exit()
@@ -299,13 +272,15 @@ def main():
             res = qa.invoke({"query": query})  # Check for answer in context
             answer, docs = res["result"], res["source_documents"]  
             if answer == 'answer is not available in the context':
-                convo = gemini_text_model(query)
-                print('\n',convo)
+                convo = gemini_chat_model(query)
+                print(f"\n> Question:\n {query}")
+                print(f"\n> Answer:\n {convo}")
                 speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
                 if speak_response in ['yes', 'y']:
                     voice(convo)
             else:
-                print(answer)    
+                print(f"\n> Question:\n {query}")
+                print(f"\n> Answer:\n {answer}")
                 speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
                 if speak_response in ['yes', 'y']:
                     voice(answer)
