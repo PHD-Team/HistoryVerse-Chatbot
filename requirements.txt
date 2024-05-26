@@ -16,6 +16,9 @@ SpeechRecognition
 faster_whisper
 pyttsx3
 pyaudio
+pygame
+langid
+gtts
 
 # to chat with our data
 docx2txt
