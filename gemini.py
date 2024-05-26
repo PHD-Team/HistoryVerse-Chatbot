@@ -32,7 +32,7 @@ GOOGLE_API_KEY = genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 # Set up the model
 generation_config = {
   "temperature": 1,
-  "top_p": 0.95,
+  "top_p": 1,
   "top_k": 64,
   "max_output_tokens": 8192,
   "response_mime_type": "text/plain",
@@ -191,9 +191,10 @@ def pdf_conversation(file_source):
     Answer:
     """
     prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
+    full_prompt = prompt + "\n" + "\n".join(memory)
 
     # Create Stuff chain
-    stuff_chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
+    stuff_chain = load_qa_chain(model, chain_type="stuff", prompt=full_prompt)
 
     while True:
         # Get user input type
@@ -209,15 +210,18 @@ def pdf_conversation(file_source):
             print("Invalid input. Please enter 't' or 'v'.")
             continue
 
+        memory.append(f"User: {question}")
+
         # Exit if requested
         if question.lower() in ['quit', 'q', 'exit']:
             break
         result = stuff_chain.invoke({"input_documents": pages, "question": question}, return_only_outputs=True)
+        memory.append(f"answer: {result['output_text']}")
         print(f"\n> Question:\n {question}")
         print(f"\n> Answer:\n {result['output_text']}")
         speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
         if speak_response in ['yes', 'y']:
-           voice(result['output_text'])
+           voice(result['output_text']) 
 
 def main():
     while True:
@@ -241,7 +245,8 @@ def main():
         elif isinstance(query, str):
             qa = retrieval_qa_pipline()
             res = qa.invoke({"query": query})  # Check for answer in context
-            answer, docs = res["result"], res["source_documents"]  
+            answer, docs = res["result"], res["source_documents"]
+            memory.append(f"answer: {answer}") 
             
             if answer == 'answer is not available in the context':
                 convo = gemini_chat_model(query)
@@ -256,7 +261,7 @@ def main():
                 print(f"\n> Answer:\n {answer}")
                 speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
                 if speak_response in ['yes', 'y']:
-                    voice(answer)
+                    voice(answer)  
          
       
       elif conv_type == 'v':
@@ -270,7 +275,9 @@ def main():
         elif isinstance(query, str):
             qa = retrieval_qa_pipline()
             res = qa.invoke({"query": query})  # Check for answer in context
-            answer, docs = res["result"], res["source_documents"]  
+            answer, docs = res["result"], res["source_documents"]
+            memory.append(f"answer: {answer}")
+            
             if answer == 'answer is not available in the context':
                 convo = gemini_chat_model(query)
                 print(f"\n> Question:\n {query}")
@@ -283,8 +290,8 @@ def main():
                 print(f"\n> Answer:\n {answer}")
                 speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
                 if speak_response in ['yes', 'y']:
-                    voice(answer)
-    
+                    voice(answer)  
+
       elif conv_type == 'i':
          
          image_path = input("\nplease enter yout image path: ")

@@ -19,10 +19,10 @@ from langchain.prompts import PromptTemplate
 from langchain.chains.question_answering import load_qa_chain
 
 from gemini import GOOGLE_API_KEY, gemini_chat_model, identify_url_content
-from SpeechRecognition import recognize_speech, process_user_voice, voice, speek
+from SpeechRecognition import recognize_speech, process_user_voice, voice, speek, text_to_speech
 from gemini_data_chat import retrieval_qa_pipline
 
-import speech_recognition as sr
+from gemini import memory
 
 app = Flask(__name__)
 
@@ -42,7 +42,9 @@ def text_conversation():
     elif isinstance(query, str):
             qa = retrieval_qa_pipline()
             res = qa.invoke({"query": query})
-            answer, docs = res["result"], res["source_documents"]  
+            answer, docs = res["result"], res["source_documents"]
+            memory.append(f"answer: {answer}")  
+            
             if answer == "answer is not available in the context":
                 convo = gemini_chat_model(query)
                 response_text = convo
@@ -61,14 +63,16 @@ def voice_conversation():
     data = request.get_json()
     speak_response = data.get("speak", False)
 
-    query = recognize_speech()
-    # query = process_user_voice()
+    # query = recognize_speech()
+    query = process_user_voice()
     if not query:
         response = jsonify("No input detected. Please try again.")
     else:
         qa = retrieval_qa_pipline()
         res = qa.invoke({"query": query})
         answer, docs = res["result"], res["source_documents"]
+        memory.append(f"answer: {answer}")
+        
         if answer == "answer is not available in the context":
             convo = gemini_chat_model(query)
             response_text = convo
@@ -108,8 +112,8 @@ def image_conversation():
             return jsonify({"error": "Please provide a question in text mode."})
 
     elif mode == "voice":
-        question = recognize_speech()
-        # question = process_user_voice()
+        # question = recognize_speech()
+        question = process_user_voice()
         if question:
             response_text = gemini_chat_model(question, img)
         else:
@@ -167,21 +171,25 @@ def pdf_conversation():
     Answer:
     """
     prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
+    full_prompt = prompt + "\n" + "\n".join(memory)
 
-    stuff_chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
+    stuff_chain = load_qa_chain(model, chain_type="stuff", prompt= full_prompt)
     
     if mode == "text":
         if not question:
             return jsonify({"error": "Please provide a question in text mode."})
     elif mode == "voice":
-        question = recognize_speech()
-        # question = process_user_voice()
+        # question = recognize_speech()
+        question = process_user_voice()
         if not question:
             return jsonify({"error": "Speech not recognized."})
     else:
         return jsonify({"error": "Invalid mode. Choose 'text' or 'voice'."})
     
+    memory.append(f"User: {question}")
+    
     result = stuff_chain.invoke({"input_documents": pages, "question": question}, return_only_outputs=True)
+    memory.append(f"answer: {result['output_text']}")
     response_text = result['output_text']
     response = jsonify({"Question:": question}, {"Answer": response_text})
     if speak_response:

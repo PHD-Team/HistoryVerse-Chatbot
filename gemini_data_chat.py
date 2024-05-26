@@ -68,27 +68,27 @@ def retrieval_qa_pipline():
 
     return qa
 
-def main():
+# def main():
 
-    qa = retrieval_qa_pipline()
-    # Interactive questions and answers
-    while True:
-        query = input("\nEnter a query: ")
-        if query == "exit":
-            break
+#     qa = retrieval_qa_pipline()
+#     # Interactive questions and answers
+#     while True:
+#         query = input("\nEnter a query: ")
+#         if query == "exit":
+#             break
         
-        # Get the answer from the chain
-        res = qa.invoke({"query": query})  # Pass the query as a dictionary
-        answer, docs = res["result"], res["source_documents"]
+#         # Get the answer from the chain
+#         res = qa.invoke({"query": query})  # Pass the query as a dictionary
+#         answer, docs = res["result"], res["source_documents"]
 
-        # Print the result
-        print("\n\n> Question:")
-        print(query)
-        print("\n> Answer:")
-        print(answer)
+#         # Print the result
+#         print("\n\n> Question:")
+#         print(query)
+#         print("\n> Answer:")
+#         print(answer)
 
-if __name__ == "__main__":
-    logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(filename)s:%(lineno)s - %(message)s", level=logging.INFO
-    )
-    main()
+# if __name__ == "__main__":
+#     logging.basicConfig(
+#         format="%(asctime)s - %(levelname)s - %(filename)s:%(lineno)s - %(message)s", level=logging.INFO
+#     )
+#     main()
