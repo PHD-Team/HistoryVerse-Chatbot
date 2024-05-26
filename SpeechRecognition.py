@@ -1,8 +1,10 @@
 import os
 import speech_recognition as sr
+import langid
 import pyttsx3
 import pyaudio
-import time
+import pygame
+from gtts import gTTS
 from dotenv import load_dotenv
 from faster_whisper import WhisperModel
 import google.generativeai as genai
@@ -33,15 +35,37 @@ def recognize_speech():
         print("Could not connect to Google Speech.")
         exit()
 
-# convert the model answer to voice
-def voice(text):
+def text_to_speech(text):
     spoken_response = text.replace('*', '')
     tts_engine = pyttsx3.init()
+    tts_engine.setProperty('rate', 160) 
     voices = tts_engine.getProperty('voices')
-    tts_engine.setProperty('voice', voices[0].id) #changing index changes voices but ony 0(male) and 1(female) are working here
+    tts_engine.setProperty('voice', voices[1].id) #changing index changes voices but ony 0(male) and 1(female) are working here
     tts_engine.say(spoken_response)
-    tts_engine.runAndWait()
+    tts_engine.runAndWait()           
 
+def voice(text, filename='output.mp3'):
+    # Remove any special characters (e.g., '*' ) from the text
+    spoken_response = text.replace('*', '').replace('\n', '').replace('#', '')
+    # Identify the language of the text
+    language_code, _ = langid.classify(spoken_response)
+    # Create a gTTS object
+    tts = gTTS(text=spoken_response, lang=language_code, slow=False, tld='co.uk')
+    # Save the audio file
+    tts.save(filename)
+    # Play the audio file using Pygame
+    pygame.mixer.init()
+    pygame.mixer.music.load(filename)
+    pygame.mixer.music.play()
+    # Wait for playback to finish
+    while pygame.mixer.music.get_busy():
+        pygame.time.Clock().tick(10)
+    # Stop and quit Pygame
+    pygame.mixer.music.stop()
+    pygame.mixer.quit()
+    # Delete the audio file
+    os.remove(filename)
+     
 load_dotenv()
 GOOGLE_API_KEY = genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"] = constants.OPENAI_API_KEY
@@ -95,60 +119,3 @@ def wav_to_text(audio_path):
     segments, _ = whisper_model.transcribe(audio_path)
     text = ''.join(segment.text for segment in segments)
     return text
-
-# # for load gemini models api keys
-# import google.generativeai as genai
-# from dotenv import load_dotenv
-
-# load_dotenv()
-
-# GOOGLE_API_KEY = genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-
-# # Set up the model
-# generation_config = {
-#   "temperature": 0.9,
-#   "top_p": 1,
-#   "top_k": 1,
-#   "max_output_tokens": 2048,
-# }
-
-# safety_settings = [
-#   {
-#     "category": "HARM_CATEGORY_HARASSMENT",
-#     "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-#   },
-#   {
-#     "category": "HARM_CATEGORY_HATE_SPEECH",
-#     "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-#   },
-#   {
-#     "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-#     "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-#   },
-#   {
-#     "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-#     "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-#   },
-# ]
-
-# # use it if you want to chat with text only
-# def gemini_text_model(query):
-#     text_model = genai.GenerativeModel(model_name="gemini-1.0-pro",
-#                                       generation_config=generation_config,
-#                                       safety_settings=safety_settings)
-#     text_response = text_model.generate_content(query)
-#     return text_response.text
-
-# while True:
-#     query = process_user_voice()
-#     if query.lower() in ['quit', 'q', 'exit']:
-#         sys.exit()
-#     elif isinstance(query, str):
-#         convo = gemini_text_model(query)
-#         print("\n\n> Question:")
-#         print(query)
-#         print("\n> Answer:")
-#         print(convo)
-#         speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
-#         if speak_response in ['yes', 'y']:
-#             speek(convo)
