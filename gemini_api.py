@@ -1,6 +1,7 @@
 import logging
 import os
 import argparse
+import uuid
 
 from flask import Flask, request, jsonify
 # for vision model and images visulization
@@ -19,79 +20,92 @@ from langchain.prompts import PromptTemplate
 from langchain.chains.question_answering import load_qa_chain
 
 from gemini import GOOGLE_API_KEY, gemini_chat_model, identify_url_content
-from SpeechRecognition import recognize_speech, process_user_voice, voice, speek, text_to_speech
+from SpeechRecognition import recognize_speech, process_user_voice, voice, speek, text_to_speech, process_audio_path
 from gemini_data_chat import retrieval_qa_pipline
+from upload_audio_file import get_firebase_url, upload_to_firebase
 
 from gemini import memory
 
 app = Flask(__name__)
+
+def process_response(query, convo, speak_response):
+    response = jsonify({"Question": query, "Answer": convo})
+    if speak_response:
+        audio_filename = f"{uuid.uuid4()}.mp3" 
+        audio_path = f"speak_audio_file/{audio_filename}"
+
+        # Generate the audio file
+        audio_filename = voice(convo, audio_filename)
+
+        # Upload the audio to Firebase Storage
+        upload_to_firebase(audio_filename, audio_path) 
+
+        # Get the Firebase URL
+        firebase_url = get_firebase_url(audio_path)
+
+        # Delete the local audio file after upload
+        os.remove(audio_filename)
+
+        # Update the response to include the Firebase URL
+        response = jsonify({"Question": query}, {"Answer": convo}, {"audio_url": firebase_url})
+
+    return response
 
 @app.route("/text_convo", methods=["GET", "POST"])
 def text_conversation():
     data = request.get_json()
     query = data.get("query")
     speak_response = data.get("speak", False)
- 
+
     if query.startswith('http'):
         content_type = identify_url_content(query)
         if content_type == 'image':
-                response = image_conversation()
+            return image_conversation()
         elif content_type == 'pdf':
-                response = pdf_conversation()
+            return pdf_conversation()
     
     elif isinstance(query, str):
-            qa = retrieval_qa_pipline()
-            res = qa.invoke({"query": query})
-            answer, docs = res["result"], res["source_documents"]
-            memory.append(f"answer: {answer}")  
-            
-            if answer == "answer is not available in the context":
-                convo = gemini_chat_model(query)
-                response_text = convo
-                response = jsonify({"Question": query}, {"Answer": convo})
-                if speak_response:
-                    voice(response_text)
-            else:
-                response_text = answer 
-                response = jsonify({"Question": query}, {"Answer": answer})
-                if speak_response:
-                    voice(response_text)           
+        qa = retrieval_qa_pipline()
+        res = qa.invoke({"query": query})
+        answer, docs = res["result"], res["source_documents"]
+        memory.append(f"answer: {answer}")
+
+        if answer.lower() != 'answer is not available in the context':
+             response = process_response(query, answer, speak_response)
+        else:
+            convo = gemini_chat_model(query)
+            response = process_response(query, convo, speak_response)          
     return response
 
 @app.route("/voice_convo", methods=["GET", "POST"])
 def voice_conversation():
     data = request.get_json()
+    audio_file_path = data.get("audio_file_path")
     speak_response = data.get("speak", False)
 
-    # query = recognize_speech()
-    query = process_user_voice()
+    query = process_audio_path(audio_file_path)
     if not query:
-        response = jsonify("No input detected. Please try again.")
+        return jsonify("No input detected. Please try again.")
     else:
         qa = retrieval_qa_pipline()
         res = qa.invoke({"query": query})
-        answer, docs = res["result"], res["source_documents"]
-        memory.append(f"answer: {answer}")
+        answer = res["result"]
+        memory.append(f"answer: {answer}")  
         
-        if answer == "answer is not available in the context":
-            convo = gemini_chat_model(query)
-            response_text = convo
-            response = jsonify({"Question": query}, {"Answer": convo})
-            if speak_response:
-                voice(response_text)
+        if answer.lower() != 'answer is not available in the context':
+             response = process_response(query, answer, speak_response)
         else:
-            response_text = answer 
-            response = jsonify({"Question": query}, {"Answer": answer})
-            if speak_response:
-                voice(response_text)           
+            convo = gemini_chat_model(query)
+            response = process_response(query, convo, speak_response)           
     return response
 
 @app.route("/image_convo", methods=["GET", "POST"])
 def image_conversation():
     data = request.get_json()
-    image_source = data.get("query")
+    image_source = data.get("image_source")
     mode = data.get("mode", "text")  # Default to text mode
     question = data.get("question")
+    audio_file_path = data.get("audio_file_path")
     speak_response = data.get("speak", False)
 
     if image_source.startswith('http'):
@@ -112,8 +126,7 @@ def image_conversation():
             return jsonify({"error": "Please provide a question in text mode."})
 
     elif mode == "voice":
-        # question = recognize_speech()
-        question = process_user_voice()
+        question = process_audio_path(audio_file_path)
         if question:
             response_text = gemini_chat_model(question, img)
         else:
@@ -121,16 +134,15 @@ def image_conversation():
     else:
         return jsonify({"error": "Invalid mode. Choose 'text' or 'voice'."})
 
-    response = jsonify({"Question:": question}, {"Answer": response_text})
-    if speak_response:
-        voice(response_text)
+    response = process_response(question, response_text, speak_response)
     return response
 
 @app.route("/pdf_convo", methods=["GET", "POST"])
 def pdf_conversation():
     data = request.get_json()
-    file_source = data.get("query")
+    file_source = data.get("file_source")
     mode = data.get("mode", "text")
+    audio_file_path = data.get("audio_file_path")
     question = data.get("question")
     speak_response = data.get("speak", False)
 
@@ -164,6 +176,7 @@ def pdf_conversation():
     you can summrize the all context too. Make sure to provide all the details.
     If the answer is not in the provided context, simply say so and inform the user.
     Do not provide the wrong answer. Please answer in the same language as the question.
+    Make sure the answers are in the same language as their question.
     Context:
     {context}
     Question:
@@ -179,8 +192,7 @@ def pdf_conversation():
         if not question:
             return jsonify({"error": "Please provide a question in text mode."})
     elif mode == "voice":
-        # question = recognize_speech()
-        question = process_user_voice()
+        question = process_audio_path(audio_file_path)
         if not question:
             return jsonify({"error": "Speech not recognized."})
     else:
@@ -191,9 +203,7 @@ def pdf_conversation():
     result = stuff_chain.invoke({"input_documents": pages, "question": question}, return_only_outputs=True)
     memory.append(f"answer: {result['output_text']}")
     response_text = result['output_text']
-    response = jsonify({"Question:": question}, {"Answer": response_text})
-    if speak_response:
-        voice(response_text)
+    response = process_response(question, response_text, speak_response)
     return response
     
 if __name__ == "__main__":
@@ -202,10 +212,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--host",
         type=str,
-        default="127.0.0.1",
-        help="Host to run the UI on. Defaults to 127.0.0.1. "
-        "Set to 0.0.0.0 to make the UI externally "
-        "accessible from other devices.",
+        default="0.0.0.0",  # Change this to 0.0.0.0
+        help="Host to run the UI on. Defaults to 0.0.0.0 to make the UI externally accessible from other devices.",
     )
     args = parser.parse_args()
 

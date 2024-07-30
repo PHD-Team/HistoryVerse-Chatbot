@@ -18,7 +18,7 @@ from langchain_core.prompts import PromptTemplate
 # for identifythe url content type
 from urllib.parse import urlparse
 # for speech recognition
-from SpeechRecognition import recognize_speech, process_user_voice, voice, speek
+from SpeechRecognition import recognize_speech, process_user_voice, voice, speek,  hear_response
 # for chating with our database
 from gemini_data_chat import retrieval_qa_pipline
 # for load gemini models api keys
@@ -72,7 +72,7 @@ def gemini_chat_model(query, img=None):
     """
     memory.append(f"User: {query}")
     full_query = historical_prompt + "\n" + "\n".join(memory)
-    gemini_model = genai.GenerativeModel(model_name="gemini-1.5-flash-latest",
+    gemini_model = genai.GenerativeModel(model_name="gemini-1.5-flash",
                                              generation_config=generation_config,
                                              safety_settings=safety_settings)
     # Determine which model to use based on the presence of an image
@@ -105,6 +105,59 @@ def identify_url_content(url):
     except Exception as e:
         print(f"Error processing URL: {e}")
         return "unknown"
+    
+def handle_answer(query, answer):
+    memory.append(f"User: {query}")
+    memory.append(f"Answer: {answer}")
+    print(f"Question: {query}")
+    print(f"Answer: {answer}")
+    voice_response = input("\nDo you want to hear the response? (yes or no): ").lower()
+    if voice_response in ['yes', 'y']:
+        hear_response(answer)   
+
+def text_conversation():
+    while True:
+        query = input("Enter a query: ")
+
+        if query.lower() in ['quit', 'q', 'exit']:
+            return
+
+        if query:
+            if query.startswith('http'):
+                content_type = identify_url_content(query)
+                if content_type == 'image':
+                    image_conversation(query)
+                elif content_type == 'pdf':
+                    pdf_conversation(query)
+            else:
+                qa = retrieval_qa_pipline()
+                res = qa.invoke({"query": query})
+                answer = res["result"]
+
+                if answer.lower() != 'answer is not available in the context':
+                    handle_answer(query, answer)
+                else:
+                    convo = gemini_chat_model(query)
+                    handle_answer(query, convo)
+
+def voice_conversation():
+    while True:
+        query = process_user_voice()
+
+        if query.lower() in ['quit', 'q', 'exit']:
+            return
+
+        if query:
+            qa = retrieval_qa_pipline()
+            res = qa.invoke({"query": query})
+            answer = res["result"]
+
+            if answer.lower() != 'answer is not available in the context':
+                handle_answer(query, answer)
+            else:
+                # Use the conversational model if no answer from the database
+                convo = gemini_chat_model(query)
+                handle_answer(query, convo)    
 
 def image_conversation(image_source):
     
@@ -125,28 +178,20 @@ def image_conversation(image_source):
         if conv_img_type == 't':
             question = input("\nEnter your question about this image: ")
             if question.lower() in ['quit', 'q', 'exit']:
-                break
+                return
             else:
                 convo = gemini_chat_model(question, img)
-                print(f"\n> Question:\n {question}")
-                print(f"\n> Answer:\n {convo}")
-                speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
-                if speak_response in ['yes', 'y']:
-                    voice(convo)
+                handle_answer(question, convo)
                   
         elif conv_img_type == 'v':
-            print("\nEnter your question about this image: ")
             question = recognize_speech()
             # question = process_user_voice()  
             if question.lower() in ['quit', 'q', 'exit']:
-                break
+                return
             else:
                 convo = gemini_chat_model(question, img)
-                print(f"\n> Question:\n {question}")
-                print(f"\n> Answer:\n {convo}")
-                speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
-                if speak_response in ['yes', 'y']:
-                    voice(convo)      
+                handle_answer(question, convo)
+                      
 
 def pdf_conversation(file_source):
     # Load PDF content
@@ -173,7 +218,7 @@ def pdf_conversation(file_source):
     vector_index = Chroma.from_texts(texts, embeddings).as_retriever(search_kwargs={"k": 5})
 
     # Set up model and chain for question answering
-    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", google_api_key=GOOGLE_API_KEY, temperature=1)
+    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=GOOGLE_API_KEY, temperature=1)
     qa_chain = RetrievalQA.from_chain_type(
         model, retriever=vector_index, return_source_documents=False
     )
@@ -183,7 +228,7 @@ def pdf_conversation(file_source):
     Your name is Mora. Answer the question as detailed as possible from the provided context.
     you can summrize the all context too. Make sure to provide all the details.
     If the answer is not in the provided context, simply say so and inform the user.
-    Do not provide the wrong answer.
+    Do not provide the wrong answer. Make sure the answers are in the same language as their question.
     Context:
     {context}
     Question:
@@ -210,101 +255,30 @@ def pdf_conversation(file_source):
             print("Invalid input. Please enter 't' or 'v'.")
             continue
 
-        memory.append(f"User: {question}")
-
         # Exit if requested
         if question.lower() in ['quit', 'q', 'exit']:
             break
         result = stuff_chain.invoke({"input_documents": pages, "question": question}, return_only_outputs=True)
-        memory.append(f"answer: {result['output_text']}")
-        print(f"\n> Question:\n {question}")
-        print(f"\n> Answer:\n {result['output_text']}")
-        speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
-        if speak_response in ['yes', 'y']:
-           voice(result['output_text']) 
+        handle_answer(question, result['output_text'])
 
 def main():
     while True:
-      conv_type = input("\nPlease enter 't' for text conversation or enter 'v' for voice conversation or enter 'i' for images conversation or enter 'p' for pdf conversation: ").lower()
-      
-      if conv_type == 't':
-        
-        query = input("\nEnter a query: ")
-        
-        if query.lower() in ['quit', 'q', 'exit']:
-          sys.exit()
+        conv_type = input("\nPlease enter 't' for text, 'v' for voice, 'i' for images, or 'p' for PDF conversation, or 'exit' to end the program: ").lower()
 
-        elif query.startswith('http'):
-           content_type = identify_url_content(query)
-           if content_type == 'image':
-              image_conversation(query)
-           
-           elif content_type == 'pdf':
-              pdf_conversation(query)
-
-        elif isinstance(query, str):
-            qa = retrieval_qa_pipline()
-            res = qa.invoke({"query": query})  # Check for answer in context
-            answer, docs = res["result"], res["source_documents"]
-            memory.append(f"answer: {answer}") 
-            
-            if answer == 'answer is not available in the context':
-                convo = gemini_chat_model(query)
-                print(f"\n> Question:\n {query}")
-                print(f"\n> Answer:\n {convo}")
-                speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
-                if speak_response in ['yes', 'y']:
-                    voice(convo)
-            
-            else:
-                print(f"\n> Question:\n {query}")
-                print(f"\n> Answer:\n {answer}")
-                speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
-                if speak_response in ['yes', 'y']:
-                    voice(answer)  
-         
-      
-      elif conv_type == 'v':
-        
-        query = recognize_speech()
-        # query = process_user_voice()
-        
-        if query.lower() in ['quit', 'q', 'exit']:
-          sys.exit()
-        
-        elif isinstance(query, str):
-            qa = retrieval_qa_pipline()
-            res = qa.invoke({"query": query})  # Check for answer in context
-            answer, docs = res["result"], res["source_documents"]
-            memory.append(f"answer: {answer}")
-            
-            if answer == 'answer is not available in the context':
-                convo = gemini_chat_model(query)
-                print(f"\n> Question:\n {query}")
-                print(f"\n> Answer:\n {convo}")
-                speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
-                if speak_response in ['yes', 'y']:
-                    voice(convo)
-            else:
-                print(f"\n> Question:\n {query}")
-                print(f"\n> Answer:\n {answer}")
-                speak_response = input("\nDo you want to hear the response? (yes or no): ").lower()
-                if speak_response in ['yes', 'y']:
-                    voice(answer)  
-
-      elif conv_type == 'i':
-         
-         image_path = input("\nplease enter yout image path: ")
-         image_conversation(image_path)
-                
-      elif conv_type == 'p':
-            
+        if conv_type == 't':
+            text_conversation()
+        elif conv_type == 'v':
+            voice_conversation()
+        elif conv_type == 'i':
+           image_path = input("\nplease enter yout image path: ")
+           image_conversation(image_path)
+        elif conv_type == 'p':
             pdf_path = input("\nEnter the path to your PDF file: ")
             pdf_conversation(pdf_path)
-
-      else:
-        print("Invalid input. Please enter 't', 'v', 'i', or 'p'.")               
-
+        elif conv_type.lower() in ['quit', 'q', 'exit']:
+            sys.exit()
+        else:
+            print("Invalid input. Please enter 't', 'v', 'i', or 'p'.")
 
 if __name__ == "__main__":
-  main()
+    main()

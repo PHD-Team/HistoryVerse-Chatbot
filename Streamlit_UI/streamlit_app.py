@@ -22,16 +22,13 @@ import langid
 from gtts import gTTS
 from faster_whisper import WhisperModel
 from PIL import Image
-import logging
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.callbacks.manager import CallbackManager
 import pygame
-import constants
+import tempfile
 
 load_dotenv()
 GOOGLE_API_KEY = genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-OPENAI_API_KEY = os.environ["OPENAI_API_KEY"] = constants.OPENAI_API_KEY
-client = OpenAI(api_key=OPENAI_API_KEY)
 
 recognizer = sr.Recognizer()
 source = sr.Microphone()
@@ -43,17 +40,6 @@ whisper_model = WhisperModel(whisper_size,
                              compute_type='int8',
                              cpu_threads=num_cores,
                              num_workers=num_cores)
-
-import warnings
-warnings.filterwarnings(
-    "ignore", message=r"torch.utils._pytree._register_pytree_node is deprecated"
-)
-
-memory = [] # global conversation_memory
-PERSIST_DIRECTORY = "DB/"
-CHROMA_SETTINGS = Settings(anonymized_telemetry=False, is_persistent=True)
-callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
-
 
 def process_user_voice():
     with source as s:
@@ -99,6 +85,27 @@ def voice(text, filename='output.mp3'):
     pygame.mixer.quit()
     return filename
 
+def voice(text, filename='output.mp3'):
+    spoken_response = text.replace('*', '').replace('\n', '').replace(
+        '#', '')
+    language_code, _ = langid.classify(spoken_response)
+    tts = gTTS(text=spoken_response,
+               lang=language_code,
+               slow=False,
+               tld='co.uk')
+    
+    with tempfile.TemporaryDirectory() as tempdir:
+        temp_filename = os.path.join(tempdir, filename)
+        tts.save(temp_filename)
+
+        pygame.mixer.init()
+        pygame.mixer.music.load(temp_filename)
+        pygame.mixer.music.play()
+        while pygame.mixer.music.get_busy():
+            pygame.time.Clock().tick(10)
+        pygame.mixer.music.stop()
+        pygame.mixer.quit()
+    return filename
 
 generation_config = {
     "temperature": 1,
@@ -126,6 +133,11 @@ safety_settings = [
     },
 ]
 
+memory = [] # global conversation_memory
+
+PERSIST_DIRECTORY = "DB/"
+CHROMA_SETTINGS = Settings(anonymized_telemetry=False, is_persistent=True)
+callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
 
 def retrieval_qa_pipline():
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
@@ -214,7 +226,7 @@ def handle_answer(query, answer):
         voice(answer)
 
 def text_conversation():
-    query = st.text_input("Enter a query:")
+    query = st.text_input("Enter your Question:")
     if query:
         # Handle URL input
         if query.startswith('http'):
@@ -342,7 +354,8 @@ def main():
     
     st.title("HistoryVerse Chatbot")
     st.write(
-        "Welcome to the HistoryVerse Chatbot. I'm MORA. You can ask any questions about history, historical images, and documents."
+        """Greetings! I'm MORA, your guide to all things historical. Ask me anything about the past, from ancient civilizations to modern events! I can answer your questions,
+           identify historical images and documents, and even help you understand their context. Let's embark on a journey through time!"""
     )
 
     conv_type = st.selectbox("Select conversation type:",
@@ -359,12 +372,12 @@ def main():
                                     type=['jpg', 'jpeg', 'png'])
         if img_file is not None:
             image = Image.open(img_file)
-            image_conversation(image)  # Pass the image to the image conversation function
+            image_conversation(image)
 
     elif conv_type == 'PDF':
         pdf_file = st.file_uploader("Upload a PDF:", type=['pdf'])
         if pdf_file:
-            pdf_conversation(pdf_file)  # Pass the pdf file to the pdf conversation function
+            pdf_conversation(pdf_file)
 
 if __name__ == "__main__":
     main()

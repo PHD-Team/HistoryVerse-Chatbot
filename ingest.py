@@ -10,10 +10,7 @@ from langchain_community.vectorstores import Chroma
 from chromadb.config import Settings
 
 from langchain_community.document_loaders import CSVLoader, PDFMinerLoader, TextLoader, UnstructuredExcelLoader, Docx2txtLoader
-from langchain_community.document_loaders import UnstructuredFileLoader, UnstructuredMarkdownLoader
-
-from dotenv import load_dotenv
-load_dotenv()
+from langchain_community.document_loaders import UnstructuredFileLoader, UnstructuredMarkdownLoader, UnstructuredPowerPointLoader, UnstructuredImageLoader
 
 # Define the folder for storing database
 SOURCE_DIRECTORY = "SOURCE_DOCUMENTS/"
@@ -39,6 +36,11 @@ DOCUMENT_MAP = {
     ".xlsx": UnstructuredExcelLoader,
     ".docx": Docx2txtLoader,
     ".doc": Docx2txtLoader,
+    ".pptx": UnstructuredPowerPointLoader,
+    ".ppt": UnstructuredPowerPointLoader,
+    ".png": UnstructuredImageLoader,
+    ".jpg": UnstructuredImageLoader,
+    ".jpeg": UnstructuredImageLoader,
 }
 
 def file_log(logentry):
